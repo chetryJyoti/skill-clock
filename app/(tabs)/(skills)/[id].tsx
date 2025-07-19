@@ -20,6 +20,9 @@ type Skill = {
   lastPracticed?: string;
   createdAt: string;
   sessions?: Session[];
+  // Enhanced fields
+  dailyGoalMinutes?: number;
+  totalGoalHours?: number;
 };
 
 type Session = {
@@ -67,14 +70,22 @@ export default function SkillDetail() {
     return `${h}h ${m}m`;
   };
 
-  const getProgress = (hours: number, minutes: number): number => {
+  const getProgress = (
+    hours: number,
+    minutes: number,
+    goalHours: number
+  ): number => {
     const totalMinutes = hours * 60 + minutes;
-    const targetMinutes = 10000 * 60; // 10,000 hours in minutes
+    const targetMinutes = goalHours * 60;
     return Math.min(totalMinutes / targetMinutes, 1);
   };
 
-  const getProgressPercentage = (hours: number, minutes: number): string => {
-    const progress = getProgress(hours, minutes);
+  const getProgressPercentage = (
+    hours: number,
+    minutes: number,
+    goalHours: number
+  ): string => {
+    const progress = getProgress(hours, minutes, goalHours);
     return (progress * 100).toFixed(1);
   };
 
@@ -84,6 +95,36 @@ export default function SkillDetail() {
     const diffTime = Math.abs(now.getTime() - created.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
+  };
+
+  const getEstimatedCompletionDays = (
+    currentHours: number,
+    currentMinutes: number,
+    goalHours: number,
+    dailyMinutes: number
+  ): number => {
+    const currentTotalMinutes = currentHours * 60 + currentMinutes;
+    const goalTotalMinutes = goalHours * 60;
+    const remainingMinutes = goalTotalMinutes - currentTotalMinutes;
+
+    if (remainingMinutes <= 0 || dailyMinutes <= 0) return 0;
+
+    return Math.ceil(remainingMinutes / dailyMinutes);
+  };
+
+  const formatEstimatedTime = (days: number): string => {
+    if (days <= 0) return "Goal completed! 🎉";
+    if (days < 30) return `${days} days left`;
+    if (days < 365) {
+      const months = Math.floor(days / 30);
+      return `~${months} month${months !== 1 ? "s" : ""} left`;
+    }
+    const years = Math.floor(days / 365);
+    return `~${years} year${years !== 1 ? "s" : ""} left`;
+  };
+
+  const getTodayProgress = (timeToday: number, dailyGoal: number): number => {
+    return Math.min(timeToday / dailyGoal, 1);
   };
 
   const getRecentSessions = (): Session[] => {
@@ -109,6 +150,15 @@ export default function SkillDetail() {
         day: "numeric",
       });
     }
+  };
+
+  const getStreakStatus = (): string => {
+    const streak = skill?.currentStreak || 0;
+    if (streak === 0) return "Start your streak!";
+    if (streak < 7) return `${streak} day streak - keep going!`;
+    if (streak < 30) return `${streak} day streak - you're on fire! 🔥`;
+    if (streak < 100) return `${streak} day streak - amazing dedication! 🚀`;
+    return `${streak} day streak - you're a master! 🏆`;
   };
 
   const startTimer = () => {
@@ -142,9 +192,20 @@ export default function SkillDetail() {
     );
   }
 
-  const progress = getProgress(skill.totalHours, skill.totalMinutes);
+  // Use defaults for legacy skills
+  const goalHours = skill.totalGoalHours || 10000;
+  const dailyGoal = skill.dailyGoalMinutes || 60;
+
+  const progress = getProgress(skill.totalHours, skill.totalMinutes, goalHours);
   const daysWorking = getDaysWorking(skill.createdAt);
   const recentSessions = getRecentSessions();
+  const estimatedDays = getEstimatedCompletionDays(
+    skill.totalHours,
+    skill.totalMinutes,
+    goalHours,
+    dailyGoal
+  );
+  const todayProgress = getTodayProgress(skill.timeToday, dailyGoal);
 
   return (
     <View style={styles.container}>
@@ -167,14 +228,40 @@ export default function SkillDetail() {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        {/* Progress Overview */}
+        {/* Goal Progress Overview */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Progress Overview</Text>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Goal Progress</Text>
+            <View style={styles.goalBadge}>
+              <Text style={styles.goalBadgeText}>
+                {goalHours.toLocaleString()}h Goal
+              </Text>
+            </View>
+          </View>
 
           <View style={styles.progressCircleContainer}>
-            <View style={styles.progressCircle}>
+            <View
+              style={[
+                styles.progressCircle,
+                {
+                  borderColor:
+                    progress > 0.75
+                      ? "#22c55e"
+                      : progress > 0.5
+                      ? "#f59e0b"
+                      : progress > 0.25
+                      ? "#3b82f6"
+                      : "#000",
+                },
+              ]}
+            >
               <Text style={styles.progressPercentage}>
-                {getProgressPercentage(skill.totalHours, skill.totalMinutes)}%
+                {getProgressPercentage(
+                  skill.totalHours,
+                  skill.totalMinutes,
+                  goalHours
+                )}
+                %
               </Text>
               <Text style={styles.progressLabel}>Complete</Text>
             </View>
@@ -208,29 +295,84 @@ export default function SkillDetail() {
               <View
                 style={[
                   styles.progressBarFill,
-                  { width: `${progress * 100}%` },
+                  {
+                    width: `${progress * 100}%`,
+                    backgroundColor:
+                      progress > 0.75
+                        ? "#22c55e"
+                        : progress > 0.5
+                        ? "#f59e0b"
+                        : progress > 0.25
+                        ? "#3b82f6"
+                        : "#000",
+                  },
                 ]}
               />
             </View>
             <Text style={styles.progressText}>
-              {formatTotalTime(skill.totalHours, skill.totalMinutes)} / 10,000
-              hours
+              {formatTotalTime(skill.totalHours, skill.totalMinutes)} /{" "}
+              {goalHours.toLocaleString()} hours
             </Text>
+          </View>
+
+          {/* Time Estimation */}
+          <View style={styles.estimationContainer}>
+            <Text style={styles.estimationText}>
+              {formatEstimatedTime(estimatedDays)}
+            </Text>
+            {estimatedDays > 0 && (
+              <Text style={styles.estimationSubtext}>
+                At {dailyGoal} min/day
+              </Text>
+            )}
           </View>
         </View>
 
         {/* Today's Practice */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Today's Practice</Text>
-          <View style={styles.todayContainer}>
-            <Text style={styles.todayTime}>
-              {skill.timeToday > 0
-                ? `${skill.timeToday} minutes`
-                : "No practice yet today"}
+
+          <View style={styles.dailyProgressContainer}>
+            <View style={styles.dailyProgressHeader}>
+              <Text style={styles.todayTime}>
+                {skill.timeToday} / {dailyGoal} minutes
+              </Text>
+              <Text style={styles.todayPercentage}>
+                {Math.round(todayProgress * 100)}%
+              </Text>
+            </View>
+
+            <View style={styles.dailyProgressBar}>
+              <View
+                style={[
+                  styles.dailyProgressFill,
+                  {
+                    width: `${todayProgress * 100}%`,
+                    backgroundColor: todayProgress >= 1 ? "#22c55e" : "#3b82f6",
+                  },
+                ]}
+              />
+            </View>
+
+            <Text style={styles.dailyProgressStatus}>
+              {skill.timeToday === 0
+                ? "No practice yet today - let's start!"
+                : todayProgress >= 1
+                ? "🎉 Daily goal completed! Amazing work!"
+                : `${dailyGoal - skill.timeToday} minutes to go`}
             </Text>
-            {skill.timeToday > 0 && (
-              <Text style={styles.todayEncouragement}>Great work! 🎉</Text>
-            )}
+          </View>
+        </View>
+
+        {/* Streak Information */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Current Streak</Text>
+          <View style={styles.streakInfoContainer}>
+            <Text style={styles.streakNumber}>{skill.currentStreak}</Text>
+            <Text style={styles.streakLabel}>
+              Day{skill.currentStreak !== 1 ? "s" : ""}
+            </Text>
+            <Text style={styles.streakStatus}>{getStreakStatus()}</Text>
           </View>
         </View>
 
@@ -263,6 +405,9 @@ export default function SkillDetail() {
                       ]}
                     />
                   </View>
+                  {session.duration >= dailyGoal && (
+                    <Text style={styles.sessionGoalMet}>✓</Text>
+                  )}
                 </View>
               ))}
             </View>
@@ -278,17 +423,19 @@ export default function SkillDetail() {
           )}
         </View>
 
-        {/* Streak Visualization */}
+        {/* 7-Day Streak Visualization */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>7-Day Streak</Text>
+          <Text style={styles.cardTitle}>7-Day Activity</Text>
           <View style={styles.streakContainer}>
             {Array.from({ length: 7 }, (_, i) => {
               const date = new Date();
               date.setDate(date.getDate() - (6 - i));
-              const hasSession = recentSessions.some(
+              const daySession = recentSessions.find(
                 (session) =>
                   new Date(session.date).toDateString() === date.toDateString()
               );
+              const hasSession = !!daySession;
+              const metGoal = daySession && daySession.duration >= dailyGoal;
 
               return (
                 <View key={i} style={styles.streakDay}>
@@ -296,11 +443,17 @@ export default function SkillDetail() {
                     style={[
                       styles.streakDot,
                       hasSession && styles.streakDotActive,
+                      metGoal && styles.streakDotGoal,
                     ]}
                   />
                   <Text style={styles.streakDayLabel}>
                     {date.toLocaleDateString("en-US", { weekday: "narrow" })}
                   </Text>
+                  {daySession && (
+                    <Text style={styles.streakDayTime}>
+                      {daySession.duration}m
+                    </Text>
+                  )}
                 </View>
               );
             })}
@@ -400,11 +553,29 @@ const styles = StyleSheet.create({
     shadowOpacity: 1,
     shadowRadius: 0,
   },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
   cardTitle: {
     fontSize: 18,
     fontWeight: "700",
     color: "#000",
-    marginBottom: 16,
+  },
+  goalBadge: {
+    backgroundColor: "#f8f9fa",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#e5e5e5",
+  },
+  goalBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#666",
   },
   progressCircleContainer: {
     alignItems: "center",
@@ -415,7 +586,6 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 60,
     borderWidth: 8,
-    borderColor: "#000",
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#f8f8f8",
@@ -467,26 +637,82 @@ const styles = StyleSheet.create({
   },
   progressBarFill: {
     height: "100%",
-    backgroundColor: "#000",
   },
   progressText: {
     fontSize: 12,
     color: "#666",
     textAlign: "center",
   },
-  todayContainer: {
+  estimationContainer: {
+    alignItems: "center",
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 8,
+  },
+  estimationText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#3b82f6",
+  },
+  estimationSubtext: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 4,
+  },
+  dailyProgressContainer: {
+    gap: 12,
+  },
+  dailyProgressHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  todayTime: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#000",
+  },
+  todayPercentage: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#3b82f6",
+  },
+  dailyProgressBar: {
+    height: 12,
+    backgroundColor: "#e5e5e5",
+    borderRadius: 6,
+    overflow: "hidden",
+  },
+  dailyProgressFill: {
+    height: "100%",
+    borderRadius: 6,
+  },
+  dailyProgressStatus: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+  },
+  streakInfoContainer: {
     alignItems: "center",
     paddingVertical: 10,
   },
-  todayTime: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#000",
+  streakNumber: {
+    fontSize: 48,
+    fontWeight: "800",
+    color: "#ff6b35",
+  },
+  streakLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#666",
+    marginTop: -8,
     marginBottom: 8,
   },
-  todayEncouragement: {
+  streakStatus: {
     fontSize: 14,
     color: "#666",
+    textAlign: "center",
   },
   sessionsList: {
     gap: 12,
@@ -520,6 +746,11 @@ const styles = StyleSheet.create({
     height: "100%",
     backgroundColor: "#000",
   },
+  sessionGoalMet: {
+    fontSize: 16,
+    color: "#22c55e",
+    fontWeight: "700",
+  },
   noSessionsContainer: {
     alignItems: "center",
     paddingVertical: 20,
@@ -536,11 +767,11 @@ const styles = StyleSheet.create({
   streakContainer: {
     flexDirection: "row",
     justifyContent: "space-around",
-    alignItems: "center",
+    alignItems: "flex-end",
   },
   streakDay: {
     alignItems: "center",
-    gap: 8,
+    gap: 4,
   },
   streakDot: {
     width: 12,
@@ -549,12 +780,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#e0e0e0",
   },
   streakDotActive: {
-    backgroundColor: "#000",
+    backgroundColor: "#3b82f6",
+  },
+  streakDotGoal: {
+    backgroundColor: "#22c55e",
   },
   streakDayLabel: {
     fontSize: 10,
     color: "#666",
     fontWeight: "500",
+  },
+  streakDayTime: {
+    fontSize: 8,
+    color: "#999",
   },
   timerButtonContainer: {
     position: "absolute",
