@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -139,6 +140,7 @@ export default function SkillsScreen() {
     return (
       <TouchableOpacity
         style={styles.card}
+        onPress={() => router.push(`/${item.id}`)}
         onLongPress={() => deleteSkill(item.id)}
         activeOpacity={0.7}
       >
