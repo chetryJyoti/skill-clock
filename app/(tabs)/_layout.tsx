@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import Entypo from "@expo/vector-icons/Entypo";
 import { Tabs } from "expo-router";
 import React from "react";
 import { Platform } from "react-native";
@@ -42,25 +42,21 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="(skills)"
         options={{
           title: "Skills",
           tabBarIcon: ({ color, focused }) => (
-            <MaterialCommunityIcons
-              name={focused ? "timer-sand-full" : "timer-sand"}
-              size={24}
-              color={color}
-            />
+            <Entypo name={focused ? "list" : "list"} size={24} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="streak"
+        name="timer"
         options={{
-          title: "Streak",
+          title: "Timer",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "flame" : "flame-outline"}
+            <Entypo
+              name={focused ? "stopwatch" : "stopwatch"}
               size={24}
               color={color}
             />

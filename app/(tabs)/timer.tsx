@@ -1,14 +1,14 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-const streak = () => {
+const Timer = () => {
   return (
     <View>
-      <Text>streak</Text>
+      <Text>Timer</Text>
     </View>
   );
 };
 
-export default streak;
+export default Timer;
 
 const styles = StyleSheet.create({});
