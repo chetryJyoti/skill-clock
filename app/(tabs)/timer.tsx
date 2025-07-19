@@ -1,10 +1,13 @@
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
   Modal,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -77,6 +80,21 @@ export default function TimerScreen() {
     };
   }, [isRunning, seconds]);
 
+  // Keyboard shortcuts for web
+  useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      if (event.code === "Space" && selectedSkill) {
+        event.preventDefault();
+        isRunning ? pauseTimer() : startTimer();
+      }
+    };
+
+    if (Platform.OS === "web") {
+      document.addEventListener("keydown", handleKeyPress);
+      return () => document.removeEventListener("keydown", handleKeyPress);
+    }
+  }, [isRunning, selectedSkill]);
+
   const loadSkills = async () => {
     try {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
@@ -137,6 +155,8 @@ export default function TimerScreen() {
     };
   };
 
+  const timeDisplay = useMemo(() => getTimeDisplay(), [seconds]);
+
   const startTimer = () => {
     if (!selectedSkill) {
       Alert.alert(
@@ -145,10 +165,19 @@ export default function TimerScreen() {
       );
       return;
     }
+
+    // Haptic feedback
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+
     setIsRunning(true);
   };
 
   const pauseTimer = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
     setIsRunning(false);
   };
 
@@ -165,6 +194,9 @@ export default function TimerScreen() {
             onPress: () => {
               setIsRunning(false);
               setSeconds(0);
+              if (Platform.OS !== "web") {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+              }
             },
           },
         ]
@@ -264,13 +296,18 @@ export default function TimerScreen() {
       setSelectedSkill(updatedSelectedSkill);
     }
 
+    // Success haptic
+    if (Platform.OS !== "web") {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+
     // Reset timer
     setSeconds(0);
     setIsRunning(false);
 
     // Show success message
     Alert.alert(
-      "Session Saved! 🎉",
+      "Session Saved!",
       `${sessionMinutes} minutes added to ${selectedSkill.name}`,
       [{ text: "Great!", onPress: () => {} }]
     );
@@ -291,30 +328,48 @@ export default function TimerScreen() {
     setSeconds(0); // Reset timer when switching skills
   };
 
-  const renderSkillOption = ({ item }: { item: Skill }) => (
-    <TouchableOpacity
-      style={[
-        styles.skillOption,
-        selectedSkill?.id === item.id && styles.skillOptionSelected,
-      ]}
-      onPress={() => selectSkill(item)}
-    >
-      <Text
-        style={[
-          styles.skillOptionText,
-          selectedSkill?.id === item.id && styles.skillOptionTextSelected,
-        ]}
-      >
-        {item.name}
-      </Text>
-      <Text style={styles.skillOptionTime}>
-        {Math.floor((item.totalHours * 60 + item.totalMinutes) / 60)}h{" "}
-        {(item.totalHours * 60 + item.totalMinutes) % 60}m
-      </Text>
-    </TouchableOpacity>
-  );
+  const quickStart = (minutes: number) => {
+    setSeconds(minutes * 60);
+    startTimer();
+  };
 
-  const timeDisplay = getTimeDisplay();
+  const renderSkillOption = useCallback(
+    ({ item }: { item: Skill }) => (
+      <TouchableOpacity
+        style={[
+          styles.skillOption,
+          selectedSkill?.id === item.id && styles.skillOptionSelected,
+        ]}
+        onPress={() => selectSkill(item)}
+      >
+        <View style={styles.skillOptionContent}>
+          <View style={styles.skillOptionLeft}>
+            <Text
+              style={[
+                styles.skillOptionText,
+                selectedSkill?.id === item.id && styles.skillOptionTextSelected,
+              ]}
+            >
+              {item.name}
+            </Text>
+            <Text
+              style={[
+                styles.skillOptionTime,
+                selectedSkill?.id === item.id && styles.skillOptionTimeSelected,
+              ]}
+            >
+              {Math.floor((item.totalHours * 60 + item.totalMinutes) / 60)}h{" "}
+              {(item.totalHours * 60 + item.totalMinutes) % 60}m
+            </Text>
+          </View>
+          {selectedSkill?.id === item.id && (
+            <Ionicons name="checkmark-circle" size={24} color="#fff" />
+          )}
+        </View>
+      </TouchableOpacity>
+    ),
+    [selectedSkill]
+  );
 
   return (
     <View style={styles.container}>
@@ -336,22 +391,39 @@ export default function TimerScreen() {
 
         {/* Skill Selector */}
         <TouchableOpacity
-          style={styles.skillSelector}
+          style={[
+            styles.skillSelector,
+            !selectedSkill && styles.skillSelectorEmpty,
+            isRunning && styles.disabled,
+          ]}
           onPress={() => setShowSkillSelector(true)}
           disabled={isRunning}
         >
-          <Text style={styles.skillSelectorLabel}>Current Skill</Text>
-          <Text style={styles.skillSelectorText}>
-            {selectedSkill ? selectedSkill.name : "Tap to select a skill"}
-          </Text>
-          <Text style={styles.skillSelectorArrow}>▼</Text>
+          <View style={styles.skillSelectorContent}>
+            <View style={styles.skillSelectorLeft}>
+              <Text style={styles.skillSelectorLabel}>Current Skill</Text>
+              <Text style={styles.skillSelectorText}>
+                {selectedSkill ? selectedSkill.name : "Select a skill to start"}
+              </Text>
+            </View>
+            <Ionicons
+              name="chevron-down"
+              size={20}
+              color={isRunning ? "#ccc" : "#666"}
+            />
+          </View>
         </TouchableOpacity>
 
         {/* Timer Display */}
         <View style={styles.timerContainer}>
           <View style={styles.timerCircle}>
-            <Text style={styles.timerText}>{timeDisplay.main}</Text>
-            <Text style={styles.timerUnit}>{timeDisplay.unit}</Text>
+            <View style={styles.timerContent}>
+              <Text style={styles.timerText}>{timeDisplay.main}</Text>
+              <Text style={styles.timerUnit}>{timeDisplay.unit}</Text>
+              <View
+                style={[styles.statusDot, isRunning && styles.statusDotActive]}
+              />
+            </View>
           </View>
         </View>
 
@@ -359,11 +431,23 @@ export default function TimerScreen() {
         {selectedSkill && (
           <View style={styles.sessionInfo}>
             <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>Today's Total</Text>
+              <Ionicons
+                name="today"
+                size={20}
+                color="#666"
+                style={styles.infoIcon}
+              />
+              <Text style={styles.infoLabel}>Today</Text>
               <Text style={styles.infoValue}>{selectedSkill.timeToday}m</Text>
             </View>
             <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>Overall Progress</Text>
+              <Ionicons
+                name="trending-up"
+                size={20}
+                color="#666"
+                style={styles.infoIcon}
+              />
+              <Text style={styles.infoLabel}>Total</Text>
               <Text style={styles.infoValue}>
                 {Math.floor(
                   (selectedSkill.totalHours * 60 + selectedSkill.totalMinutes) /
@@ -376,7 +460,13 @@ export default function TimerScreen() {
               </Text>
             </View>
             <View style={styles.infoItem}>
-              <Text style={styles.infoLabel}>Current Streak</Text>
+              <Ionicons
+                name="flame"
+                size={20}
+                color="#666"
+                style={styles.infoIcon}
+              />
+              <Text style={styles.infoLabel}>Streak</Text>
               <Text style={styles.infoValue}>
                 {selectedSkill.currentStreak} days
               </Text>
@@ -391,38 +481,50 @@ export default function TimerScreen() {
             <View style={styles.quickTimeButtons}>
               <TouchableOpacity
                 style={styles.quickTimeButton}
-                onPress={() => {
-                  setSeconds(5 * 60);
-                  startTimer();
-                }}
+                onPress={() => quickStart(5)}
               >
+                <Ionicons
+                  name="timer"
+                  size={20}
+                  color="#000"
+                  style={styles.quickTimeIcon}
+                />
                 <Text style={styles.quickTimeButtonText}>5m</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.quickTimeButton}
-                onPress={() => {
-                  setSeconds(15 * 60);
-                  startTimer();
-                }}
+                onPress={() => quickStart(15)}
               >
+                <Ionicons
+                  name="timer"
+                  size={20}
+                  color="#000"
+                  style={styles.quickTimeIcon}
+                />
                 <Text style={styles.quickTimeButtonText}>15m</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.quickTimeButton}
-                onPress={() => {
-                  setSeconds(25 * 60);
-                  startTimer();
-                }}
+                onPress={() => quickStart(25)}
               >
+                <Ionicons
+                  name="timer"
+                  size={20}
+                  color="#000"
+                  style={styles.quickTimeIcon}
+                />
                 <Text style={styles.quickTimeButtonText}>25m</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.quickTimeButton}
-                onPress={() => {
-                  setSeconds(60 * 60);
-                  startTimer();
-                }}
+                onPress={() => quickStart(60)}
               >
+                <Ionicons
+                  name="timer"
+                  size={20}
+                  color="#000"
+                  style={styles.quickTimeIcon}
+                />
                 <Text style={styles.quickTimeButtonText}>1h</Text>
               </TouchableOpacity>
             </View>
@@ -434,12 +536,27 @@ export default function TimerScreen() {
       <View style={styles.controlsContainer}>
         {!isRunning ? (
           <TouchableOpacity
-            style={[styles.controlButton, styles.startButton]}
+            style={[
+              styles.controlButton,
+              styles.startButton,
+              !selectedSkill && styles.disabledButton,
+            ]}
             onPress={startTimer}
             disabled={!selectedSkill}
           >
-            <Text style={styles.startButtonText}>
-              {seconds > 0 ? "▶ Resume" : "▶ Start"}
+            <Ionicons
+              name="play"
+              size={24}
+              color={!selectedSkill ? "#ccc" : "#fff"}
+              style={styles.buttonIcon}
+            />
+            <Text
+              style={[
+                styles.startButtonText,
+                !selectedSkill && styles.disabledButtonText,
+              ]}
+            >
+              {seconds > 0 ? "Resume" : "Start"}
             </Text>
           </TouchableOpacity>
         ) : (
@@ -447,7 +564,13 @@ export default function TimerScreen() {
             style={[styles.controlButton, styles.pauseButton]}
             onPress={pauseTimer}
           >
-            <Text style={styles.pauseButtonText}>⏸ Pause</Text>
+            <Ionicons
+              name="pause"
+              size={24}
+              color="#fff"
+              style={styles.buttonIcon}
+            />
+            <Text style={styles.pauseButtonText}>Pause</Text>
           </TouchableOpacity>
         )}
 
@@ -458,6 +581,12 @@ export default function TimerScreen() {
                 style={styles.secondaryButton}
                 onPress={resetTimer}
               >
+                <Ionicons
+                  name="refresh"
+                  size={20}
+                  color="#000"
+                  style={styles.buttonIcon}
+                />
                 <Text style={styles.secondaryButtonText}>Reset</Text>
               </TouchableOpacity>
 
@@ -465,7 +594,13 @@ export default function TimerScreen() {
                 style={[styles.secondaryButton, styles.finishButton]}
                 onPress={finishSession}
               >
-                <Text style={styles.finishButtonText}>Finish Session</Text>
+                <Ionicons
+                  name="checkmark"
+                  size={20}
+                  color="#fff"
+                  style={styles.buttonIcon}
+                />
+                <Text style={styles.finishButtonText}>Finish</Text>
               </TouchableOpacity>
             </>
           )}
@@ -487,7 +622,7 @@ export default function TimerScreen() {
                 onPress={() => setShowSkillSelector(false)}
                 style={styles.modalCloseButton}
               >
-                <Text style={styles.modalCloseText}>✕</Text>
+                <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
             </View>
 
@@ -501,6 +636,12 @@ export default function TimerScreen() {
               />
             ) : (
               <View style={styles.noSkillsContainer}>
+                <Ionicons
+                  name="add-circle-outline"
+                  size={64}
+                  color="#ccc"
+                  style={styles.noSkillsIcon}
+                />
                 <Text style={styles.noSkillsText}>No skills found</Text>
                 <Text style={styles.noSkillsSubtext}>
                   Add a skill in the Skills tab first
@@ -509,9 +650,15 @@ export default function TimerScreen() {
                   style={styles.addSkillButton}
                   onPress={() => {
                     setShowSkillSelector(false);
-                    router.push("/(tabs)/skills");
+                    router.push("/(tabs)/(skills)");
                   }}
                 >
+                  <Ionicons
+                    name="add"
+                    size={20}
+                    color="#fff"
+                    style={styles.buttonIcon}
+                  />
                   <Text style={styles.addSkillButtonText}>Go to Skills</Text>
                 </TouchableOpacity>
               </View>
@@ -556,6 +703,19 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: "#f9f9f9",
   },
+  skillSelectorContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  skillSelectorLeft: {
+    flex: 1,
+  },
+  skillSelectorEmpty: {
+    borderStyle: "dashed",
+    backgroundColor: "#f5f5f5",
+    borderColor: "#ccc",
+  },
   skillSelectorLabel: {
     fontSize: 14,
     color: "#666",
@@ -568,36 +728,33 @@ const styles = StyleSheet.create({
     color: "#000",
     marginBottom: 4,
   },
-  skillSelectorArrow: {
-    position: "absolute",
-    right: 20,
-    top: "50%",
-    fontSize: 16,
-    color: "#666",
-  },
   timerContainer: {
     alignItems: "center",
     marginBottom: 40,
   },
   timerCircle: {
-    width: 240,
-    height: 240,
-    borderRadius: 120,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
     borderWidth: 8,
     borderColor: "#000",
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#fff",
     shadowColor: "#000",
-    shadowOffset: { width: 8, height: 8 },
+    // shadowOffset: { width: 8, height: 8 },
     shadowOpacity: 1,
     shadowRadius: 0,
+  },
+  timerContent: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   timerText: {
     fontSize: 36,
     fontWeight: "800",
     color: "#000",
-    fontFamily: "monospace",
+    fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
   },
   timerUnit: {
     fontSize: 16,
@@ -605,25 +762,43 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontWeight: "600",
   },
+  statusDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#ccc",
+    marginTop: 8,
+    borderWidth: 2,
+    borderColor: "#000",
+  },
+  statusDotActive: {
+    backgroundColor: "#000",
+  },
   sessionInfo: {
     flexDirection: "row",
-    justifyContent: "space-around",
+    justifyContent: "space-between",
     marginHorizontal: 20,
     marginBottom: 30,
-    padding: 20,
+    gap: 12,
+  },
+  infoItem: {
+    flex: 1,
+    alignItems: "center",
     backgroundColor: "#f9f9f9",
-    borderRadius: 16,
+    padding: 16,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: "#e0e0e0",
   },
-  infoItem: {
-    alignItems: "center",
+  infoIcon: {
+    marginBottom: 4,
   },
   infoLabel: {
     fontSize: 12,
     color: "#666",
     marginBottom: 4,
     textAlign: "center",
+    fontWeight: "600",
   },
   infoValue: {
     fontSize: 16,
@@ -648,15 +823,22 @@ const styles = StyleSheet.create({
   },
   quickTimeButton: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 16,
     borderWidth: 2,
     borderColor: "#000",
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: "center",
     backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+  },
+  quickTimeIcon: {
+    marginBottom: 4,
   },
   quickTimeButtonText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "600",
     color: "#000",
   },
@@ -669,10 +851,20 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   controlButton: {
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingVertical: 18,
+    borderRadius: 16,
     alignItems: "center",
     marginBottom: 12,
+    flexDirection: "row",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 0,
+    elevation: 4,
+  },
+  buttonIcon: {
+    marginRight: 8,
   },
   startButton: {
     backgroundColor: "#000",
@@ -690,6 +882,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
   },
+  disabledButton: {
+    backgroundColor: "#f0f0f0",
+    borderWidth: 2,
+    borderColor: "#e0e0e0",
+  },
+  disabledButtonText: {
+    color: "#ccc",
+  },
   secondaryControls: {
     flexDirection: "row",
     gap: 12,
@@ -697,11 +897,13 @@ const styles = StyleSheet.create({
   secondaryButton: {
     flex: 1,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: "center",
     backgroundColor: "#fff",
     borderWidth: 2,
     borderColor: "#000",
+    flexDirection: "row",
+    justifyContent: "center",
   },
   secondaryButtonText: {
     color: "#000",
@@ -717,6 +919,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
+  disabled: {
+    opacity: 0.5,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -731,7 +936,7 @@ const styles = StyleSheet.create({
   },
   modalHeader: {
     flexDirection: "row",
-    justifyContent: "between",
+    justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
     paddingBottom: 20,
@@ -746,10 +951,6 @@ const styles = StyleSheet.create({
   },
   modalCloseButton: {
     padding: 4,
-  },
-  modalCloseText: {
-    fontSize: 18,
-    color: "#666",
   },
   skillsList: {
     paddingHorizontal: 20,
@@ -767,6 +968,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#000",
     borderColor: "#000",
   },
+  skillOptionContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  skillOptionLeft: {
+    flex: 1,
+  },
   skillOptionText: {
     fontSize: 18,
     fontWeight: "600",
@@ -780,9 +989,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
   },
+  skillOptionTimeSelected: {
+    color: "#ccc",
+  },
   noSkillsContainer: {
     alignItems: "center",
     padding: 40,
+  },
+  noSkillsIcon: {
+    marginBottom: 16,
   },
   noSkillsText: {
     fontSize: 18,
@@ -800,7 +1015,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 24,
     backgroundColor: "#000",
-    borderRadius: 8,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
   },
   addSkillButtonText: {
     color: "#fff",
