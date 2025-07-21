@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Slider from "@react-native-community/slider";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -12,7 +13,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import Slider from '@react-native-community/slider';
 type Skill = {
   id: string;
   name: string;
@@ -286,7 +286,7 @@ export default function SkillsScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Add New Skill</Text>
+            <Text style={styles.modalTitle}>Master a New Skill</Text>
 
             {/* Skill Name Input */}
             <View style={styles.inputSection}>
@@ -377,7 +377,7 @@ export default function SkillsScreen() {
                 style={[styles.modalButton, styles.addButtonModal]}
                 onPress={addSkill}
               >
-                <Text style={styles.addButtonTextModal}>Add Skill</Text>
+                <Text style={styles.addButtonTextModal}>Add</Text>
               </TouchableOpacity>
             </View>
           </View>
