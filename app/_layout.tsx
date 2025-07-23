@@ -1,46 +1,74 @@
+import {
+  FirebaseAuthTypes,
+  getAuth,
+  onAuthStateChanged,
+} from "@react-native-firebase/auth";
 import { useFonts } from "expo-font";
-import { Slot, Redirect } from "expo-router";
-
+import { router, Stack, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect, useState } from "react";
-import { getAuth, onAuthStateChanged } from "@react-native-firebase/auth";
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, View } from "react-native";
 
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
-  const [loaded] = useFonts({
+const RootLayout = () => {
+  const [initializing, setInitializing] = useState(true);
+  const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
+  const segments = useSegments();
+  const [fontsLoaded] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
 
-  const [user, setUser] = useState<any | null>(null);
-  const [initializing, setInitializing] = useState(true);
+  const isLoading = !fontsLoaded || initializing;
+
 
   useEffect(() => {
     const auth = getAuth();
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      console.log("🔁 Auth state changed", user);
+    const subscriber = onAuthStateChanged(auth, (user) => {
       setUser(user);
       if (initializing) setInitializing(false);
     });
-    return unsubscribe;
+    return subscriber;
   }, []);
 
+  // Handle splash screen and routing
   useEffect(() => {
-    if (loaded && !initializing) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded, initializing]);
+    const prepare = async () => {
+      try {
+        // Wait for both fonts and auth to load
+        if (fontsLoaded && !initializing) {
+          await SplashScreen.hideAsync();
+          
+          // Handle routing after everything is ready
+          const inTabsGroup = segments[0] === "(tabs)";
+          if (user && !inTabsGroup) {
+            router.replace("/(tabs)/skills");
+          } else if (!user && inTabsGroup) {
+            router.replace("/");
+          }
+        }
+      } catch (e) {
+        console.warn(e);
+      }
+    };
 
-  if (!loaded || initializing) return null;
+    prepare();
+  }, [fontsLoaded, initializing, user, segments]);
 
-
-  if (!user ) {
-    return <Redirect href="/(auth)" />;
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
   }
 
-  if (user) {
-    return <Redirect href="/(tabs)" />;
-  }
+  return (
+    <Stack>
+      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+    </Stack>
+  );
+};
 
-  return <Slot />;
-}
+export default RootLayout;

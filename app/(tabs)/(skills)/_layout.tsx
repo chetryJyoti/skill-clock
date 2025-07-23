@@ -4,7 +4,7 @@ import React from "react";
 const SkillsLayout = () => {
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index"  />
+      <Stack.Screen name="skills" />
       <Stack.Screen name="[id]" />
     </Stack>
   );
